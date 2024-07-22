@@ -39,7 +39,7 @@ const fetchRawScript = async (download) => { // turn download into raw script lo
 };
 
 const Embed_br = (script, rawScriptContent, page, maxPages) => {
-    const user = script.user && script.user[0] ? script.user[0] : { username: 'Unknown', image: null, verified: false };
+    const user = script.user && script.user[0] ? script.user[0] : { username: 'Cant Find Name.', image: null, verified: false };
     const pfp_url = user.image ? `https://rscripts.net/assets/avatars/${user.image}` : 'https://img.getimg.ai/generated/img-u1vYyfAtK7GTe9OK1BzeH.jpeg';
     const description = cleanDescription(script.description) || 'No description available';
 
