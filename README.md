@@ -1,5 +1,5 @@
 # Rscripts-Discord-Bot
-This a discord bot that is similar to the other script searcher bot I coded using scriptblox API, but this uses rscripts api, and I coded this for fun.
+This a discord bot that is similar to the other script searcher bot I coded using the scriptblox API, but this uses rscripts api, and I coded this for fun.
 
 ## Commands
 - `!search <query>`
