@@ -10,3 +10,6 @@ This a discord bot that is similar to the other script searcher bot I coded usin
 ## API
 api i use:
 [Rscripts API](https://api.rscripts.net/)
+
+## Image 
+![image](https://github.com/user-attachments/assets/0bfe3c7b-ddfa-4a11-afef-f0c65315e397)
