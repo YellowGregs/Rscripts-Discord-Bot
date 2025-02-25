@@ -5,139 +5,192 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+});
 
-const rscripts_api = 'https://rscripts.net/api';
+const Rscripts = 'https://rscripts.net/api/v2';
 
 client.once('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
+  console.log(`Logged in as ${client.user.tag}!`);
 });
 
-const stripHtml = (html) => {
-    const dom = new JSDOM(html);
-    return dom.window.document.body.textContent || "";
+const strip = (html) => {
+  const dom = new JSDOM(html);
+  return dom.window.document.body.textContent || "";
 };
 
-const cleanDescription = (description) => { // makes the description shorter since uhh.. problems 
-    const strippedDescription = stripHtml(description);
-    const limit = 200; // Limit description to 200 characters
-    return strippedDescription.length > limit ? `${strippedDescription.substring(0, limit)}...` : strippedDescription;
+const Descriptions = (description) => {
+  const stripped = strip(description || '');
+  const limit = 200;
+  return stripped.length > limit ? `${stripped.substring(0, limit)}...` : stripped;
 };
 
-const fetchRawScript = async (download) => { // turn download into raw script lol
-    if (!download) return 'Theres no download that was found sorry';
+const Raw_Script = async (raw_scripts) => {
+  if (!raw_scripts) return 'No raw script URL provided.';
+  try {
+    const response = await fetch(raw_scripts);
+    if (!response.ok) {
+      console.error(`Failed to fetch raw script: ${response.statusText}`);
+      return 'Error fetching script content.';
+    }
+    const text = await response.text();
+    return text.length > 900 ? `${text.substring(0, 900)}...` : text;
+  } catch (error) {
+    console.error('Error fetching raw script:', error);
+    return 'Error fetching script content.';
+  }
+};
+
+const Embeds = (script, raw_content, page, maxPages) => {
+  const user = script.user || { username: 'Unknown', image: null, verified: false };
+  const pfpUrl = user.image || 'https://img.getimg.ai/generated/img-u1vYyfAtK7GTe9OK1BzeH.jpeg';
+  const description = Descriptions(script.description || 'No description available');
+
+  const gameTitle = (script.game && script.game.title) || script.title || 'Universal Script';
+
+  const keyFieldValue = script.keySystem ? '🔑 Requires Key' : '🆓 No Key';
+
+  const fields = [
+    { name: 'Game', value: gameTitle, inline: true },
+    { name: 'Verified', value: user.verified ? '✔️ Verified' : '❌ Not Verified', inline: true },
+    { name: 'Script Type', value: script.paid ? 'Paid' : 'Free', inline: true },
+    { name: 'Universal', value: script.universal ? '✔️ Universal' : '❌ Not Universal', inline: true },
+    { name: 'Views', value: script.views?.toString() || '0', inline: true },
+    { name: 'Likes', value: script.likes?.toString() || '0', inline: true },
+    { name: 'Dislikes', value: script.dislikes?.toString() || '0', inline: true },
+    { name: 'Key', value: keyFieldValue, inline: true },
+    { name: 'Patched', value: script.patched ? '❌ Patched' : '✔️ Not Patched', inline: true },
+    { name: 'Mobile Ready', value: script.mobileReady ? '✔️ Mobile Ready' : '❌ Not Mobile Ready', inline: true },
+    { name: 'Created At', value: script.createdAt ? new Date(script.createdAt).toLocaleString() : 'N/A', inline: true }
+  ];
+
+  return new EmbedBuilder()
+    .setColor('#0099ff')
+    .setTitle(script.title || 'No Title')
+    .setURL(`https://rscripts.net/script/${script.slug || script._id}`)
+    .setAuthor({ name: user.username, iconURL: pfpUrl })
+    .setThumbnail((script.game && script.game.imgurl) || script.image || 'https://media1.tenor.com/m/j9Jhn5M1Xw0AAAAd/neuro-sama-ai.gif')
+    .setDescription(description)
+    .addFields(fields)
+    .addFields(
+      { name: 'The Script', value: `\`\`\`lua\n${raw_content}\n\`\`\`` },
+      { name: 'Links', value: `[Raw Script](${script.rawScript || 'N/A'}) - [Script Page](https://rscripts.net/script/${script.slug || script._id})` }
+    )
+    .setFooter({ text: `Page ${page} of ${maxPages}` });
+};
+
+const fetchScripts = async (query, page = 1) => {
+  try {
+    const url = `${Rscripts}/scripts?q=${encodeURIComponent(query)}&page=${page}&orderBy=date&sort=desc`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`API responded with status ${response.status}`);
+    }
+    const data = await response.json();
+    if (!data.scripts || data.scripts.length === 0) {
+      return { scripts: [], info: { currentPage: page, maxPages: page } };
+    }
+    return data;
+  } catch (error) {
+    console.error('Error fetching scripts:', error);
+    throw error;
+  }
+};
+
+const Actions = (currentPage, maxPages) =>
+  new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('first')
+      .setLabel('⏪ First')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(currentPage === 1),
+    new ButtonBuilder()
+      .setCustomId('previous')
+      .setLabel('◀️ Previous')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(currentPage <= 1),
+    new ButtonBuilder()
+      .setCustomId('page')
+      .setLabel(`Page ${currentPage} of ${maxPages}`)
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true),
+    new ButtonBuilder()
+      .setCustomId('next')
+      .setLabel('▶️ Next')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(currentPage >= maxPages),
+    new ButtonBuilder()
+      .setCustomId('last')
+      .setLabel('⏭️ Last')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(currentPage === maxPages)
+  );
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+
+  if (message.content.startsWith('!search ')) {
+    const query = message.content.slice(8).trim();
+    if (!query) {
+      return message.channel.send('Please provide a search query.');
+    }
+    let page = 1;
+    let data;
+
     try {
-        const response = await fetch(`https://rscripts.net/raw/${download}`);
-        if (!response.ok) {
-            return 'Theres no script that was found sorry';
-        }
-        return response.text();
+      data = await fetchScripts(query, page);
     } catch (error) {
-        console.error('Error fetching raw script:', error);
-        return 'Theres no script that was found sorry';
+      return message.channel.send('An error occurred while fetching scripts.');
     }
-};
 
-const Embed_br = (script, rawScriptContent, page, maxPages) => {
-    const user = script.user && script.user[0] ? script.user[0] : { username: 'Cant Find Name.', image: null, verified: false };
-    const pfp_url = user.image ? `https://rscripts.net/assets/avatars/${user.image}` : 'https://img.getimg.ai/generated/img-u1vYyfAtK7GTe9OK1BzeH.jpeg';
-    const description = cleanDescription(script.description) || 'No description available';
+    if (!data.scripts.length) {
+      return message.channel.send('No scripts found for the given query.');
+    }
 
-    const fields = [
-        { name: 'Game', value: script.title || 'Universal Script', inline: true },
-        { name: 'Verified', value: user.verified ? '✔️ Verified' : '❌ Not Verified', inline: true },
-        { name: 'ScriptType', value: script.paid ? 'Paid' : 'Free', inline: true },
-        { name: 'Universal', value: script.universal ? '✔️ Universal' : '❌ Not Universal', inline: true },
-        { name: 'Views', value: script.views?.toString() || '0', inline: true },
-        { name: 'Likes', value: script.likes?.toString() || '0', inline: true },
-        { name: 'Dislikes', value: script.dislikes?.toString() || '0', inline: true },
-        { name: 'Key', value: script.keySystem ? '🔑 Requires Key' : '🆓 No Key', inline: true },
-        { name: 'Key Link', value: script.key_link ? `[Key Link](${script.key_link})` : 'N/A', inline: true },
-        { name: 'Patched', value: script.patched ? '❌ Patched' : '✔️ Not Patched', inline: true },
-        { name: 'Mobile Ready', value: script.mobileReady ? '✔️ Mobile Ready' : '❌ Not Mobile Ready', inline: true },
-        { name: 'Created At', value: script.creation || 'N/A', inline: true }
-    ];
+    let script = data.scripts[0];
+    const raw_scripts = script.rawScript || (script.download ? `https://rscripts.net/raw/${script.download}` : null);
+    const raw_content = await Raw_Script(raw_scripts);
+    let embed = Embeds(script, raw_content, page, data.info.maxPages);
+    let row = Actions(page, data.info.maxPages);
 
-    const otherFields = fields.map(field => ({
-        name: field.name,
-        value: field.value || 'N/A',
-        inline: field.inline
-    }));
+    const msg = await message.channel.send({ embeds: [embed], components: [row] });
+    const filter = i => ['first', 'previous', 'next', 'last'].includes(i.customId) && i.user.id === message.author.id;
+    const collector = msg.createMessageComponentCollector({ filter, time: 60000 });
 
-    return new EmbedBuilder()
-        .setColor('#0099ff')
-        .setTitle(script.title || 'No title')
-        .setURL(`https://rscripts.net/script/${script.slug}`)
-        .setAuthor({ name: user.username, iconURL: pfp_url })
-        .setThumbnail(script.gameThumbnail || 'https://media1.tenor.com/m/j9Jhn5M1Xw0AAAAd/neuro-sama-ai.gif')
-        .setDescription(description)
-        .addFields(otherFields)
-        .addFields(
-            { name: 'The Script', value: `\`\`\`lua\n${rawScriptContent}\n\`\`\`` },
-            { name: 'Links', value: `[Raw Script](https://rscripts.net/raw/${script.download || 'N/A'}) - [Script Page](https://rscripts.net/script/${script.slug})` }
-        )
-        .setFooter({ text: `Page ${page} of ${maxPages}` });
-};
-
-client.on('messageCreate', async message => {
-    if (message.content.startsWith('!search ')) {
-        const query = message.content.replace('!search ', '');
-        let page = 1;
-
-        const fetchScripts = async (page) => {
-            const response = await fetch(`${rscripts_api}/scripts?q=${encodeURIComponent(query)}&page=${page}&orderBy=date&sort=desc`);
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        };
-
-        try {
-            const data = await fetchScripts(page);
-            if (data.scripts.length > 0) {
-                const script = data.scripts[0];
-                const rawScriptContent = await fetchRawScript(script.download);
-                const embed = Embed_br(script, rawScriptContent, page, data.info.maxPages);
-
-                const row = new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId('previous')
-                            .setLabel('Previous')
-                            .setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder()
-                            .setCustomId('next')
-                            .setLabel('Next')
-                            .setStyle(ButtonStyle.Primary)
-                    );
-
-                const msg = await message.channel.send({ embeds: [embed], components: [row] });
-
-                const filter = i => ['previous', 'next'].includes(i.customId) && i.user.id === message.author.id;
-                const collector = msg.createMessageComponentCollector({ filter, time: 60000 });
-
-                collector.on('collect', async i => {
-                    if (i.customId === 'next') {
-                        page++;
-                    } else if (i.customId === 'previous' && page > 1) {
-                        page--;
-                    }
-
-                    const data = await fetchScripts(page);
-                    const script = data.scripts[0];
-                    const rawScriptContent = await fetchRawScript(script.download);
-                    const embed = Embed_br(script, rawScriptContent, page, data.info.maxPages);
-
-                    await i.update({ embeds: [embed], components: [row] });
-                });
-            } else {
-                message.channel.send('No scripts found for the given query.');
-            }
-        } catch (error) {
-            console.error(error);
-            message.channel.send('An error occurred while fetching the scripts.');
+    collector.on('collect', async i => {
+      try {
+        if (i.customId === 'first') {
+          page = 1;
+        } else if (i.customId === 'previous' && page > 1) {
+          page--;
+        } else if (i.customId === 'next') {
+          page++;
+        } else if (i.customId === 'last') {
+          const tempData = await fetchScripts(query, page);
+          page = tempData.info.maxPages;
         }
-    }
+
+        const newData = await fetchScripts(query, page);
+        if (!newData.scripts.length) {
+          return i.reply({ content: 'No scripts found on this page.', ephemeral: true });
+        }
+        script = newData.scripts[0];
+        const new_raw_scripts = script.rawScript || (script.download ? `https://rscripts.net/raw/${script.download}` : null);
+        const new_raw_content = await Raw_Script(new_raw_scripts);
+        embed = Embeds(script, new_raw_content, page, newData.info.maxPages);
+        row = Actions(page, newData.info.maxPages);
+        await i.update({ embeds: [embed], components: [row] });
+      } catch (err) {
+        console.error('Error during pagination:', err);
+        await i.reply({ content: 'An error occurred while updating the script.', ephemeral: true });
+      }
+    });
+
+    collector.on('end', () => {
+      msg.edit({ components: [] });
+    });
+  }
 });
 
-client.login(process.env.DISCORD_BOT_TOKEN);
+client.login(process.env.BOT_TOKEN);
